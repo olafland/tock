@@ -1,0 +1,24 @@
+Futures
+* wait to temp sensors
+* wait for timers
+* wait for rx via radio
+* wait for tx done via radio
+* wait for uart rx
+* wait for uart tx done
+* wait for button pressed
+* SD card?
+
+repeat: wait for timer -> wait for temp sensor -> tx over radio as advertisement
+as futures
+
+
+Low power modes
+* check that nrf uses all the low-power modes as possible
+
+Tickless design?
+
+replace nrf softdevice on hail
+* listen to uart
+	on rx -> send to radio
+[* listen to radio
+	on rx -> send to uart]
