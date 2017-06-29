@@ -1,3 +1,9 @@
+Playground
+	toggle LED when timer expires
+	read temp sensor
+	print on denug when read done
+	later: tx with advertisement
+
 Futures
 * wait to temp sensors
 * wait for timers

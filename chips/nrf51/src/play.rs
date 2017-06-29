@@ -1,5 +1,3 @@
-//TODO: somehow start the timer
-//TODO: print when timer expires
 //TODO: tofgle LED when timer expieres
 
 // use core::cell::Cell;
