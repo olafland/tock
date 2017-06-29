@@ -274,6 +274,19 @@ pub unsafe fn reset_handler() {
     //nrf51::radio::RADIO.set_client(ble_radio);
     ble_radio_virtual_alarm.set_client(ble_radio);
 
+
+    let play_me_virtual_alarm = static_init!(
+        VirtualMuxAlarm<'static, Rtc>,
+        VirtualMuxAlarm::new(mux_alarm),
+        192/8);
+
+    let play = static_init!(
+      nrf51::play::PlayMe<VirtualMuxAlarm<'static, Rtc>>,
+      nrf51::play::PlayMe::new(
+      play_me_virtual_alarm));
+    play_me_virtual_alarm.set_client(play);
+    play.configure_periodic_alarm();
+
     // Start all of the clocks. Low power operation will require a better
     // approach than this.
     nrf51::clock::CLOCK.low_stop();
