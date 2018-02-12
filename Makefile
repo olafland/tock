@@ -1,5 +1,6 @@
 # default board
-TOCK_BOARD ?= nrf51dk
+TOCK_BOARD ?= hail
+
 
 # rules for making the kernel
 .PHONY: all
