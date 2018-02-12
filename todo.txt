@@ -1,4 +1,6 @@
 Playground
+	do rust course
+	use app to start it
 	toggle LED when timer expires
 	read temp sensor
 	print on denug when read done
