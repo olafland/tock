@@ -14,10 +14,5 @@ pub mod chip;
 pub mod crt1;
 pub mod uart;
 pub mod radio;
-<<<<<<< HEAD
-pub mod ble_advertising_driver;
-pub mod play;
-=======
 
 pub use crt1::init;
->>>>>>> 4f6f73f1134d0233ecdd97d035fd2534b124dca1
