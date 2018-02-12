@@ -43,6 +43,7 @@ SECTIONS
     {
         . = ALIGN(4);
         _textstart = .;         /* Symbol expected by some MS build toolchains */
+        _stext = .;         /* First of standard s,e (start/end) pair */
 
         /* Place vector table at the beginning of ROM.
          *
@@ -135,6 +136,18 @@ SECTIONS
     } > rom
     PROVIDE_HIDDEN (__exidx_end = .);
 
+    /* Region for on-chip kernel non-volatile storage.
+     * Align on 512 bytes since that is the page size.
+     * Volumes within this region are allocated with the
+     * storage_volume! macro in utils.rs. */
+    . = ALIGN(512);
+    .storage :
+    {
+      _sstorage = .;
+      *(.storage* storage*)
+      _estorage = .;
+    } > rom
+    . = ALIGN(512);
 
     /* Mark the end of static elements */
     . = ALIGN(4);
@@ -183,6 +196,21 @@ SECTIONS
 
     .sram (NOLOAD) :
     {
+        /* Kernel stack.
+         *
+         * To keep all kernel memory contiguous (eases MPU protection of kernel
+         * data), Tock next places its own stack into SRAM.
+         */
+        . = ALIGN(8);
+         _sstack = .;
+
+        . = . + __stack_size__;
+
+        . = ALIGN(8);
+        _estack = .;
+
+
+
         /* Kernel BSS section. Memory that is expected to be initialized to
          * zero.
          *
@@ -201,21 +229,6 @@ SECTIONS
 
         . = ALIGN(4);
         _ezero = .;
-
-
-
-        /* Kernel stack.
-         *
-         * To keep all kernel memory contiguous (eases MPU protection of kernel
-         * data), Tock next places its own stack into SRAM.
-         */
-        . = ALIGN(8);
-         _sstack = .;
-
-        . = . + __stack_size__;
-
-        . = ALIGN(8);
-        _estack = .;
 
 
 

@@ -11,13 +11,13 @@ pub mod adc;
 pub mod flash;
 pub mod watchdog;
 pub mod radio;
-pub mod temperature;
+pub mod sensors;
 pub mod crc;
 pub mod symmetric_encryption;
-pub mod ninedof;
 pub mod gpio_async;
 pub mod dac;
 pub mod nonvolatile_storage;
+pub mod usb;
 
 /// Shared interface for configuring components.
 pub trait Controller {

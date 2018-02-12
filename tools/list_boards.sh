@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # http://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+oneline=0
 while getopts "h?1" opt; do
     case "$opt" in
     h|\?)
@@ -25,5 +26,7 @@ fi
 
 echo Supported Tock boards: $boards
 echo ""
-echo To build the kernel for a particular board, run:
-echo "    make TOCK_BOARD=<board name>"
+echo To build the kernel for a particular board, change to that direcotry
+echo "    cd boards/hail"
+echo "    make"
+

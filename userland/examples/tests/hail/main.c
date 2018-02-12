@@ -9,13 +9,14 @@
 #include <simple_ble.h>
 
 #include <adc.h>
+#include <ambient_light.h>
 #include <button.h>
 #include <gpio.h>
-#include <isl29035.h>
+#include <humidity.h>
 #include <led.h>
 #include <ninedof.h>
 #include <nrf51_serialization.h>
-#include <si7021.h>
+#include <temperature.h>
 #include <timer.h>
 
 // Intervals for BLE advertising and connections
@@ -35,12 +36,12 @@ void ble_address_set (void) {
 
 // Callback for button presses.
 //   btn_num: The index of the button associated with the callback
-//   val: 0 if pressed, 1 if depressed
+//   val: 1 if pressed, 0 if depressed
 static void button_callback(__attribute__ ((unused)) int btn_num,
                             int val,
                             __attribute__ ((unused)) int arg2,
                             __attribute__ ((unused)) void *ud) {
-  if (val == 0) {
+  if (val == 1) {
     led_on(1); // green
   } else {
     led_off(1);
@@ -51,10 +52,12 @@ static void sample_sensors (void) {
 
   // Sensors: temperature/humidity, acceleration, light
   int temp;
+  temperature_read_sync(&temp);
   unsigned humi;
-  si7021_get_temperature_humidity_sync(&temp, &humi);
+  humidity_read_sync(&humi);
   uint32_t accel_mag = ninedof_read_accel_mag();
-  int light          = isl29035_read_light_intensity();
+  int light;
+  ambient_light_read_intensity_sync(&light);
 
   // Analog inputs: A0-A5
   uint16_t val;

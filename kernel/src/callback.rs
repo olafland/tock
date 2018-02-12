@@ -4,7 +4,7 @@ use core::nonzero::NonZero;
 use process;
 
 /// Userspace app identifier.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct AppId {
     idx: usize,
 }
@@ -33,12 +33,20 @@ impl AppId {
     pub fn idx(&self) -> usize {
         self.idx
     }
+
+    pub fn get_editable_flash_range(&self) -> (usize, usize) {
+        process::get_editable_flash_range(self.idx)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum RustOrRawFnPtr {
-    Raw { ptr: NonZero<*mut ()> },
-    Rust { func: fn(usize, usize, usize, usize), },
+    Raw {
+        ptr: NonZero<*mut ()>,
+    },
+    Rust {
+        func: fn(usize, usize, usize, usize),
+    },
 }
 
 /// Wrapper around a function pointer.
@@ -83,14 +91,16 @@ impl Callback {
                     panic!("Attempt to schedule rust function: func {:?}", func)
                 }
             };
-            process::schedule(process::FunctionCall {
-                                  r0: r0,
-                                  r1: r1,
-                                  r2: r2,
-                                  r3: self.appdata,
-                                  pc: fn_ptr.get() as usize,
-                              },
-                              self.app_id)
+            process::schedule(
+                process::FunctionCall {
+                    r0: r0,
+                    r1: r1,
+                    r2: r2,
+                    r3: self.appdata,
+                    pc: fn_ptr.get() as usize,
+                },
+                self.app_id,
+            )
         }
     }
 

@@ -24,13 +24,14 @@ int ltc294x_set_callback (subscribe_cb callback, void* callback_args) {
 }
 
 int ltc294x_read_status(void) {
-  return command(DRIVER_NUM_LTC294X, 1, 0);
+  return command(DRIVER_NUM_LTC294X, 1, 0, 0);
 }
 
 int ltc294x_configure(ltc294x_model_e model,
                       interrupt_pin_conf_e int_pin,
                       uint16_t prescaler,
                       vbat_alert_adc_mode_e vbat) {
+  int rc;
   uint8_t M = 0;
   if (model == LTC2941 || model == LTC2942) {
     // ltc2941/2 expects log_2 of prescaler value
@@ -52,40 +53,44 @@ int ltc294x_configure(ltc294x_model_e model,
       default:   M = 4; break;
     }
   }
+
+  rc = command(DRIVER_NUM_LTC294X, 10, model, 0);
+  if (rc != TOCK_SUCCESS) return rc;
+
   uint8_t cmd = (int_pin & 0x03) | ((M & 0x07) << 2) | ((vbat & 0x03) << 5);
-  return command(DRIVER_NUM_LTC294X, 2, cmd);
+  return command(DRIVER_NUM_LTC294X, 2, cmd, 0);
 }
 
 int ltc294x_reset_charge(void) {
-  return command(DRIVER_NUM_LTC294X, 3, 0);
+  return command(DRIVER_NUM_LTC294X, 3, 0, 0);
 }
 
 int ltc294x_set_high_threshold(uint16_t threshold) {
-  return command(DRIVER_NUM_LTC294X, 4, threshold);
+  return command(DRIVER_NUM_LTC294X, 4, threshold, 0);
 }
 
 int ltc294x_set_low_threshold(uint16_t threshold) {
-  return command(DRIVER_NUM_LTC294X, 5, threshold);
+  return command(DRIVER_NUM_LTC294X, 5, threshold, 0);
 }
 
 int ltc294x_get_charge(void) {
-  return command(DRIVER_NUM_LTC294X, 6, 0);
+  return command(DRIVER_NUM_LTC294X, 6, 0, 0);
 }
 
 int ltc294x_get_voltage(void) {
-  return command(DRIVER_NUM_LTC294X, 8, 0);
+  return command(DRIVER_NUM_LTC294X, 8, 0, 0);
 }
 
 int ltc294x_get_current(void) {
-  return command(DRIVER_NUM_LTC294X, 9, 0);
+  return command(DRIVER_NUM_LTC294X, 9, 0, 0);
 }
 
 int ltc294x_shutdown(void) {
-  return command(DRIVER_NUM_LTC294X, 7, 0);
+  return command(DRIVER_NUM_LTC294X, 7, 0, 0);
 }
 
 int ltc294x_set_model(ltc294x_model_e model) {
-  return command(DRIVER_NUM_LTC294X, 10, model);
+  return command(DRIVER_NUM_LTC294X, 10, model, 0);
 }
 
 
@@ -239,9 +244,9 @@ int ltc294x_shutdown_sync(void) {
 
 int ltc294x_convert_to_coulomb_uah(int c, int Rsense, uint16_t prescaler, ltc294x_model_e model) {
   if (model == LTC2941 || model == LTC2942) {
-    return (int)(c * 0.085 * (50.0 / Rsense) * (prescaler / 128.0));
+    return (int)(c * 85 * (50.0 / Rsense) * (prescaler / 128.0));
   } else {
-    return (int)(c * 0.340 * (50.0 / Rsense) * (prescaler / 4096.0));
+    return (int)(c * 340 * (50.0 / Rsense) * (prescaler / 4096.0));
   }
 }
 

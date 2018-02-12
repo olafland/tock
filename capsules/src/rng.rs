@@ -10,14 +10,17 @@
 //! ```rust
 //! let rng = static_init!(
 //!         capsules::rng::SimpleRng<'static, sam4l::trng::Trng>,
-//!         capsules::rng::SimpleRng::new(&sam4l::trng::TRNG, kernel::Container::create()));
+//!         capsules::rng::SimpleRng::new(&sam4l::trng::TRNG, kernel::Grant::create()));
 //! sam4l::trng::TRNG.set_client(rng);
 //! ```
 
 use core::cell::Cell;
-use kernel::{AppId, AppSlice, Container, Callback, Driver, ReturnCode, Shared};
+use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 use kernel::hil::rng;
 use kernel::process::Error;
+
+/// Syscall number
+pub const DRIVER_NUM: usize = 0x40001;
 
 pub struct App {
     callback: Option<Callback>,
@@ -39,15 +42,15 @@ impl Default for App {
 
 pub struct SimpleRng<'a, RNG: rng::RNG + 'a> {
     rng: &'a RNG,
-    apps: Container<App>,
+    apps: Grant<App>,
     getting_randomness: Cell<bool>,
 }
 
 impl<'a, RNG: rng::RNG> SimpleRng<'a, RNG> {
-    pub fn new(rng: &'a RNG, container: Container<App>) -> SimpleRng<'a, RNG> {
+    pub fn new(rng: &'a RNG, grant: Grant<App>) -> SimpleRng<'a, RNG> {
         SimpleRng {
             rng: rng,
-            apps: container,
+            apps: grant,
             getting_randomness: Cell::new(false),
         }
     }
@@ -83,8 +86,9 @@ impl<'a, RNG: rng::RNG> rng::Client for SimpleRng<'a, RNG> {
 
                             // 3. Zip over the randomness iterator and chunks
                             //    of up to 4 bytes from the buffer.
-                            for (inp, outs) in randomness.take(remaining_ints)
-                                .zip(buf.chunks_mut(4)) {
+                            for (inp, outs) in
+                                randomness.take(remaining_ints).zip(buf.chunks_mut(4))
+                            {
                                 // 4. For each word of randomness input, update
                                 //    the remaining and idx and add to buffer.
                                 for (i, b) in outs.iter_mut().enumerate() {
@@ -97,13 +101,14 @@ impl<'a, RNG: rng::RNG> rng::Client for SimpleRng<'a, RNG> {
 
                         // Replace taken buffer
                         app.buffer = Some(buffer);
-
                     });
 
                     if app.remaining > 0 {
                         done = false;
                     } else {
-                        app.callback.map(|mut cb| { cb.schedule(0, app.idx, 0); });
+                        app.callback.map(|mut cb| {
+                            cb.schedule(0, app.idx, 0);
+                        });
                     }
                 }
             });
@@ -129,43 +134,31 @@ impl<'a, RNG: rng::RNG> Driver for SimpleRng<'a, RNG> {
     fn allow(&self, appid: AppId, allow_num: usize, slice: AppSlice<Shared, u8>) -> ReturnCode {
         // pass buffer in from application
         match allow_num {
-            0 => {
-                self.apps
-                    .enter(appid, |app, _| {
-                        app.buffer = Some(slice);
-                        ReturnCode::SUCCESS
-                    })
-                    .unwrap_or_else(|err| match err {
-                        Error::OutOfMemory => ReturnCode::ENOMEM,
-                        Error::AddressOutOfBounds => ReturnCode::EINVAL,
-                        Error::NoSuchApp => ReturnCode::EINVAL,
-                    })
-            }
+            0 => self.apps
+                .enter(appid, |app, _| {
+                    app.buffer = Some(slice);
+                    ReturnCode::SUCCESS
+                })
+                .unwrap_or_else(|err| err.into()),
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 
     fn subscribe(&self, subscribe_num: usize, callback: Callback) -> ReturnCode {
         match subscribe_num {
-            0 => {
-                self.apps
-                    .enter(callback.app_id(), |app, _| {
-                        app.callback = Some(callback);
-                        ReturnCode::SUCCESS
-                    })
-                    .unwrap_or_else(|err| match err {
-                        Error::OutOfMemory => ReturnCode::ENOMEM,
-                        Error::AddressOutOfBounds => ReturnCode::EINVAL,
-                        Error::NoSuchApp => ReturnCode::EINVAL,
-                    })
-            }
+            0 => self.apps
+                .enter(callback.app_id(), |app, _| {
+                    app.callback = Some(callback);
+                    ReturnCode::SUCCESS
+                })
+                .unwrap_or_else(|err| err.into()),
 
             // default
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 
-    fn command(&self, command_num: usize, data: usize, appid: AppId) -> ReturnCode {
+    fn command(&self, command_num: usize, data: usize, _: usize, appid: AppId) -> ReturnCode {
         match command_num {
             0 => /* Check if exists */ ReturnCode::SUCCESS,
 

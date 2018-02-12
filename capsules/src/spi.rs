@@ -5,9 +5,12 @@ use core::cell::Cell;
 use core::cmp;
 use kernel::{AppId, AppSlice, Callback, Driver, ReturnCode, Shared};
 use kernel::common::take_cell::{MapCell, TakeCell};
-use kernel::hil::spi::{SpiMasterDevice, SpiSlaveDevice, SpiMasterClient, SpiSlaveClient};
+use kernel::hil::spi::{SpiMasterClient, SpiMasterDevice, SpiSlaveClient, SpiSlaveDevice};
 use kernel::hil::spi::ClockPhase;
 use kernel::hil::spi::ClockPolarity;
+
+/// Syscall number
+pub const DRIVER_NUM: usize = 0x20001;
 
 // SPI operations are handled by coping into a kernel buffer for
 // writes and copying out of a kernel buffer for reads.
@@ -109,15 +112,17 @@ impl<'a, S: SpiMasterDevice> Spi<'a, S> {
         app.index = end;
 
         self.kernel_write.map(|kwbuf| {
-            app.app_write
-                .as_mut()
-                .map(|src| for (i, c) in src.as_ref()[start..end].iter().enumerate() {
+            app.app_write.as_mut().map(|src| {
+                for (i, c) in src.as_ref()[start..end].iter().enumerate() {
                     kwbuf[i] = *c;
-                });
+                }
+            });
         });
-        self.spi_master.read_write_bytes(self.kernel_write.take().unwrap(),
-                                         self.kernel_read.take(),
-                                         len);
+        self.spi_master.read_write_bytes(
+            self.kernel_write.take().unwrap(),
+            self.kernel_read.take(),
+            len,
+        );
     }
 }
 
@@ -126,12 +131,16 @@ impl<'a, S: SpiMasterDevice> Driver for Spi<'a, S> {
         match allow_num {
             // Pass in a read buffer to receive bytes into.
             0 => {
-                self.app.map(|app| { app.app_read = Some(slice); });
+                self.app.map(|app| {
+                    app.app_read = Some(slice);
+                });
                 ReturnCode::SUCCESS
             }
             // Pass in a write buffer to transmit bytes from.
             1 => {
-                self.app.map(|app| { app.app_write = Some(slice); });
+                self.app.map(|app| {
+                    app.app_write = Some(slice);
+                });
                 ReturnCode::SUCCESS
             }
             _ => ReturnCode::ENOSUPPORT,
@@ -186,7 +195,7 @@ impl<'a, S: SpiMasterDevice> Driver for Spi<'a, S> {
     // x+1: unlock spi
     //   - does nothing if lock not held
     //
-    fn command(&self, cmd_num: usize, arg1: usize, _: AppId) -> ReturnCode {
+    fn command(&self, cmd_num: usize, arg1: usize, _: usize, _: AppId) -> ReturnCode {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             // No longer supported, wrap inside a read_write_bytes
@@ -258,10 +267,12 @@ impl<'a, S: SpiMasterDevice> Driver for Spi<'a, S> {
 }
 
 impl<'a, S: SpiMasterDevice> SpiMasterClient for Spi<'a, S> {
-    fn read_write_done(&self,
-                       writebuf: &'static mut [u8],
-                       readbuf: Option<&'static mut [u8]>,
-                       length: usize) {
+    fn read_write_done(
+        &self,
+        writebuf: &'static mut [u8],
+        readbuf: Option<&'static mut [u8]>,
+        length: usize,
+    ) {
         self.app.map(move |app| {
             if app.app_read.is_some() {
                 let src = readbuf.as_ref().unwrap();
@@ -282,7 +293,9 @@ impl<'a, S: SpiMasterDevice> SpiMasterClient for Spi<'a, S> {
                 self.busy.set(false);
                 app.len = 0;
                 app.index = 0;
-                app.callback.take().map(|mut cb| { cb.schedule(app.len, 0, 0); });
+                app.callback.take().map(|mut cb| {
+                    cb.schedule(app.len, 0, 0);
+                });
             } else {
                 self.do_next_read_write(app);
             }
@@ -318,13 +331,14 @@ impl<'a, S: SpiSlaveDevice> SpiSlave<'a, S> {
         app.index = end;
 
         self.kernel_write.map(|kwbuf| {
-            app.app_write
-                .as_mut()
-                .map(|src| for (i, c) in src.as_ref()[start..end].iter().enumerate() {
+            app.app_write.as_mut().map(|src| {
+                for (i, c) in src.as_ref()[start..end].iter().enumerate() {
                     kwbuf[i] = *c;
-                });
+                }
+            });
         });
-        self.spi_slave.read_write_bytes(self.kernel_write.take(), self.kernel_read.take(), len);
+        self.spi_slave
+            .read_write_bytes(self.kernel_write.take(), self.kernel_read.take(), len);
     }
 }
 
@@ -406,7 +420,7 @@ impl<'a, S: SpiSlaveDevice> Driver for SpiSlave<'a, S> {
     ///   - does nothing if lock not held
     ///   - not implemented or currently supported
 
-    fn command(&self, cmd_num: usize, arg1: usize, _: AppId) -> ReturnCode {
+    fn command(&self, cmd_num: usize, arg1: usize, _: usize, _: AppId) -> ReturnCode {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* read_write_bytes */ => {
@@ -462,10 +476,12 @@ impl<'a, S: SpiSlaveDevice> Driver for SpiSlave<'a, S> {
 }
 
 impl<'a, S: SpiSlaveDevice> SpiSlaveClient for SpiSlave<'a, S> {
-    fn read_write_done(&self,
-                       writebuf: Option<&'static mut [u8]>,
-                       readbuf: Option<&'static mut [u8]>,
-                       length: usize) {
+    fn read_write_done(
+        &self,
+        writebuf: Option<&'static mut [u8]>,
+        readbuf: Option<&'static mut [u8]>,
+        length: usize,
+    ) {
         self.app.map(move |app| {
             if app.app_read.is_some() {
                 let src = readbuf.as_ref().unwrap();
@@ -486,7 +502,9 @@ impl<'a, S: SpiSlaveDevice> SpiSlaveClient for SpiSlave<'a, S> {
                 self.busy.set(false);
                 app.len = 0;
                 app.index = 0;
-                app.callback.take().map(|mut cb| { cb.schedule(app.len, 0, 0); });
+                app.callback.take().map(|mut cb| {
+                    cb.schedule(app.len, 0, 0);
+                });
             } else {
                 self.do_next_read_write(app);
             }
@@ -496,7 +514,9 @@ impl<'a, S: SpiSlaveDevice> SpiSlaveClient for SpiSlave<'a, S> {
     // Simple callback for when chip has been selected
     fn chip_selected(&self) {
         self.app.map(move |app| {
-            app.selected_callback.take().map(|mut cb| { cb.schedule(app.len, 0, 0); });
+            app.selected_callback.take().map(|mut cb| {
+                cb.schedule(app.len, 0, 0);
+            });
         });
     }
 }

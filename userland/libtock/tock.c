@@ -93,15 +93,16 @@ int subscribe(uint32_t driver, uint32_t subscribe,
 }
 
 
-int command(uint32_t driver, uint32_t command, int data) {
+int command(uint32_t driver, uint32_t command, int data, int arg2) {
   register uint32_t r0 asm ("r0") = driver;
   register uint32_t r1 asm ("r1") = command;
   register uint32_t r2 asm ("r2") = data;
+  register uint32_t r3 asm ("r3") = arg2;
   register int ret asm ("r0");
   asm volatile (
     "svc 2"
     : "=r" (ret)
-    : "r" (r0), "r" (r1), "r" (r2)
+    : "r" (r0), "r" (r1), "r" (r2), "r" (r3)
     : "memory"
     );
   return ret;
@@ -155,8 +156,23 @@ void* tock_app_grant_begins_at(void) {
   return memop(6, 0);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wbad-function-cast"
+int tock_app_number_writeable_flash_regions(void) {
+  return (int) memop(7, 0);
+}
+#pragma GCC diagnostic pop
+
+void* tock_app_writeable_flash_region_begins_at(int region_index) {
+  return memop(8, region_index);
+}
+
+void* tock_app_writeable_flash_region_ends_at(int region_index) {
+  return memop(9, region_index);
+}
+
 bool driver_exists(uint32_t driver) {
-  int ret = command(driver, 0, 0);
+  int ret = command(driver, 0, 0, 0);
   return ret >= 0;
 }
 

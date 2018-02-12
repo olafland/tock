@@ -3,50 +3,60 @@
 use core::nonzero::NonZero;
 use memop;
 use platform::{Chip, Platform};
+use platform::mpu::MPU;
 use platform::systick::SysTick;
 use process;
 use process::{Process, Task};
 use returncode::ReturnCode;
 use syscall::Syscall;
 
-pub unsafe fn do_process<P: Platform, C: Chip>(platform: &P,
-                                               chip: &mut C,
-                                               process: &mut Process,
-                                               appid: ::AppId,
-                                               ipc: &::ipc::IPC) {
+/// The time a process is permitted to run before being pre-empted
+const KERNEL_TICK_DURATION_US: u32 = 10000;
+/// Skip re-scheduling a process if its quanta is nearly exhausted
+const MIN_QUANTA_THRESHOLD_US: u32 = 500;
+
+pub unsafe fn do_process<P: Platform, C: Chip>(
+    platform: &P,
+    chip: &mut C,
+    process: &mut Process,
+    appid: ::AppId,
+    ipc: &::ipc::IPC,
+) {
     let systick = chip.systick();
     systick.reset();
-    systick.set_timer(10000);
+    systick.set_timer(KERNEL_TICK_DURATION_US);
     systick.enable(true);
 
     loop {
-        if chip.has_pending_interrupts() || systick.overflowed() || systick.value() <= 500 {
+        if chip.has_pending_interrupts() || systick.overflowed()
+            || systick.value() <= MIN_QUANTA_THRESHOLD_US
+        {
             break;
         }
 
         match process.current_state() {
             process::State::Running => {
                 process.setup_mpu(chip.mpu());
+                chip.mpu().enable_mpu();
                 systick.enable(true);
                 process.switch_to();
                 systick.enable(false);
+                chip.mpu().disable_mpu();
             }
-            process::State::Yielded => {
-                match process.dequeue_task() {
-                    None => break,
-                    Some(cb) => {
-                        match cb {
-                            Task::FunctionCall(ccb) => {
-                                process.push_function_call(ccb);
-                            }
-                            Task::IPC((otherapp, ipc_type)) => {
-                                ipc.schedule_callback(appid, otherapp, ipc_type);
-                            }
+            process::State::Yielded => match process.dequeue_task() {
+                None => break,
+                Some(cb) => {
+                    match cb {
+                        Task::FunctionCall(ccb) => {
+                            process.push_function_call(ccb);
                         }
-                        continue;
+                        Task::IPC((otherapp, ipc_type)) => {
+                            ipc.schedule_callback(appid, otherapp, ipc_type);
+                        }
                     }
+                    continue;
                 }
-            }
+            },
             process::State::Fault => {
                 // we should never be scheduling a process in fault
                 panic!("Attempted to schedule a faulty process");
@@ -59,7 +69,6 @@ pub unsafe fn do_process<P: Platform, C: Chip>(platform: &P,
 
         // check if the app had a fault
         if process.app_fault() {
-
             // let process deal with it as appropriate
             process.fault_state();
             continue;
@@ -88,7 +97,7 @@ pub unsafe fn do_process<P: Platform, C: Chip>(platform: &P,
                 let res = if callback_ptr_raw as usize == 0 {
                     ReturnCode::EINVAL
                 } else {
-                    let callback_ptr = NonZero::new(callback_ptr_raw);
+                    let callback_ptr = NonZero::new_unchecked(callback_ptr_raw);
 
                     let callback = ::Callback::new(appid, appdata, callback_ptr);
                     platform.with_driver(driver_num, |driver| match driver {
@@ -100,7 +109,7 @@ pub unsafe fn do_process<P: Platform, C: Chip>(platform: &P,
             }
             Some(Syscall::COMMAND) => {
                 let res = platform.with_driver(process.r0(), |driver| match driver {
-                    Some(d) => d.command(process.r1(), process.r2(), appid),
+                    Some(d) => d.command(process.r1(), process.r2(), process.r3(), appid),
                     None => ReturnCode::ENODEVICE,
                 });
                 process.set_return_code(res);

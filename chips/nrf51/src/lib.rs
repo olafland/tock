@@ -1,29 +1,23 @@
-#![feature(asm,concat_idents,const_fn)]
+#![feature(asm, concat_idents, const_fn, const_cell_new, try_from)]
 #![no_std]
-
+#![crate_name = "nrf51"]
+#![crate_type = "rlib"]
+extern crate cortexm0;
 #[allow(unused_imports)]
 #[macro_use(debug)]
 extern crate kernel;
-
-extern "C" {
-    pub fn init();
-}
+extern crate nrf5x;
 
 mod peripheral_registers;
-mod peripheral_interrupts;
-mod nvic;
 
-pub mod aes;
 pub mod chip;
-pub mod gpio;
-pub mod rtc;
-pub mod timer;
-pub mod clock;
+pub mod crt1;
 pub mod uart;
-pub mod pinmux;
-pub use chip::NRF51;
-pub mod temperature;
-pub mod trng;
 pub mod radio;
+<<<<<<< HEAD
 pub mod ble_advertising_driver;
 pub mod play;
+=======
+
+pub use crt1::init;
+>>>>>>> 4f6f73f1134d0233ecdd97d035fd2534b124dca1

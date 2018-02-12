@@ -40,5 +40,9 @@ pub trait NineDof {
 pub trait NineDofClient {
     /// Signals a command has finished. The arguments will most likely be passed
     /// over the syscall interface to an application.
-    fn callback(&self, arg1: usize, arg2: usize, arg3: usize);
+    ///
+    /// The arguments to the callback specify the sensor reading along the x, y
+    /// and z axis. The values are expressed in mg (thounsandths of standard
+    /// gravity) for acceleration and uT (micro-Teslas) for megnetic field.
+    fn callback(&self, x: usize, y: usize, z: usize);
 }

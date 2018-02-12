@@ -38,7 +38,7 @@
 //!     capsules::nonvolatile_storage_driver::NonvolatileStorage<'static>,
 //!     capsules::nonvolatile_storage_driver::NonvolatileStorage::new(
 //!         fm25cl,                      // The underlying storage driver.
-//!         kernel::Container::create(), // Storage for app-specific state.
+//!         kernel::Grant::create(), // Storage for app-specific state.
 //!         3000,                        // The byte start address for the userspace
 //!                                      // accessible memory region.
 //!         2000,                        // The length of the userspace region.
@@ -51,14 +51,13 @@
 
 use core::cell::Cell;
 use core::cmp;
-use kernel::{AppId, AppSlice, Callback, Container, Driver, ReturnCode, Shared};
+use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 use kernel::common::take_cell::TakeCell;
 use kernel::hil;
-use kernel::process::Error;
 
 pub static mut BUFFER: [u8; 512] = [0; 512];
 
-#[derive(Clone,Copy,PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum NonvolatileCommand {
     UserspaceRead,
     UserspaceWrite,
@@ -66,7 +65,7 @@ pub enum NonvolatileCommand {
     KernelWrite,
 }
 
-#[derive(Clone,Copy)]
+#[derive(Clone, Copy)]
 pub enum NonvolatileUser {
     App { app_id: AppId },
     Kernel,
@@ -102,7 +101,7 @@ pub struct NonvolatileStorage<'a> {
     // The underlying physical storage device.
     driver: &'a hil::nonvolatile_storage::NonvolatileStorage,
     // Per-app state.
-    apps: Container<App>,
+    apps: Grant<App>,
 
     // Internal buffer for copying appslices into.
     buffer: TakeCell<'static, [u8]>,
@@ -134,17 +133,18 @@ pub struct NonvolatileStorage<'a> {
 }
 
 impl<'a> NonvolatileStorage<'a> {
-    pub fn new(driver: &'a hil::nonvolatile_storage::NonvolatileStorage,
-               container: Container<App>,
-               userspace_start_address: usize,
-               userspace_length: usize,
-               kernel_start_address: usize,
-               kernel_length: usize,
-               buffer: &'static mut [u8])
-               -> NonvolatileStorage<'a> {
+    pub fn new(
+        driver: &'a hil::nonvolatile_storage::NonvolatileStorage,
+        grant: Grant<App>,
+        userspace_start_address: usize,
+        userspace_length: usize,
+        kernel_start_address: usize,
+        kernel_length: usize,
+        buffer: &'static mut [u8],
+    ) -> NonvolatileStorage<'a> {
         NonvolatileStorage {
             driver: driver,
-            apps: container,
+            apps: grant,
             buffer: TakeCell::new(buffer),
             current_user: Cell::new(None),
             userspace_start_address: userspace_start_address,
@@ -163,32 +163,32 @@ impl<'a> NonvolatileStorage<'a> {
     // Check so see if we are doing something. If not, go ahead and do this
     // command. If so, this is queued and will be run when the pending
     // command completes.
-    fn enqueue_command(&self,
-                       command: NonvolatileCommand,
-                       offset: usize,
-                       length: usize,
-                       app_id: Option<AppId>)
-                       -> ReturnCode {
-
+    fn enqueue_command(
+        &self,
+        command: NonvolatileCommand,
+        offset: usize,
+        length: usize,
+        app_id: Option<AppId>,
+    ) -> ReturnCode {
         // Do bounds check.
         match command {
-            NonvolatileCommand::UserspaceRead |
-            NonvolatileCommand::UserspaceWrite => {
+            NonvolatileCommand::UserspaceRead | NonvolatileCommand::UserspaceWrite => {
                 // Userspace sees memory that starts at address 0 even if it
                 // is offset in the physical memory.
-                if offset >= self.userspace_length || length > self.userspace_length ||
-                   offset + length > self.userspace_length {
+                if offset >= self.userspace_length || length > self.userspace_length
+                    || offset + length > self.userspace_length
+                {
                     return ReturnCode::EINVAL;
                 }
             }
-            NonvolatileCommand::KernelRead |
-            NonvolatileCommand::KernelWrite => {
+            NonvolatileCommand::KernelRead | NonvolatileCommand::KernelWrite => {
                 // Because the kernel uses the NonvolatileStorage interface,
                 // its calls are absolute addresses.
-                if offset < self.kernel_start_address ||
-                   offset >= self.kernel_start_address + self.kernel_length ||
-                   length > self.kernel_length ||
-                   offset + length > self.kernel_start_address + self.kernel_length {
+                if offset < self.kernel_start_address
+                    || offset >= self.kernel_start_address + self.kernel_length
+                    || length > self.kernel_length
+                    || offset + length > self.kernel_start_address + self.kernel_length
+                {
                     return ReturnCode::EINVAL;
                 }
             }
@@ -197,8 +197,7 @@ impl<'a> NonvolatileStorage<'a> {
         // Do very different actions if this is a call from userspace
         // or from the kernel.
         match command {
-            NonvolatileCommand::UserspaceRead |
-            NonvolatileCommand::UserspaceWrite => {
+            NonvolatileCommand::UserspaceRead | NonvolatileCommand::UserspaceWrite => {
                 app_id.map_or(ReturnCode::FAIL, |appid| {
                     self.apps
                         .enter(appid, |app, _| {
@@ -227,22 +226,25 @@ impl<'a> NonvolatileStorage<'a> {
                             if self.current_user.get().is_none() {
                                 // No app is currently using the underlying storage.
                                 // Mark this app as active, and then execute the command.
-                                self.current_user.set(Some(NonvolatileUser::App { app_id: appid }));
+                                self.current_user
+                                    .set(Some(NonvolatileUser::App { app_id: appid }));
 
                                 // Need to copy bytes if this is a write!
                                 if command == NonvolatileCommand::UserspaceWrite {
                                     app.buffer_write.as_mut().map(|app_buffer| {
                                         self.buffer.map(|kernel_buffer| {
-                                        // Check that the internal buffer and the buffer that was
-                                        // allowed are long enough.
-                                        let write_len = cmp::min(active_len, kernel_buffer.len());
+                                            // Check that the internal buffer and the buffer that was
+                                            // allowed are long enough.
+                                            let write_len =
+                                                cmp::min(active_len, kernel_buffer.len());
 
-                                        let d = &mut app_buffer.as_mut()[0..write_len];
-                                        for (i, c) in kernel_buffer[0..write_len].iter_mut()
-                                                                                 .enumerate() {
-                                            *c = d[i];
-                                        }
-                                    });
+                                            let d = &mut app_buffer.as_mut()[0..write_len];
+                                            for (i, c) in
+                                                kernel_buffer[0..write_len].iter_mut().enumerate()
+                                            {
+                                                *c = d[i];
+                                            }
+                                        });
                                     });
                                 }
 
@@ -263,58 +265,52 @@ impl<'a> NonvolatileStorage<'a> {
                                 }
                             }
                         })
-                        .unwrap_or_else(|err| match err {
-                            Error::OutOfMemory => ReturnCode::ENOMEM,
-                            Error::AddressOutOfBounds => ReturnCode::EINVAL,
-                            Error::NoSuchApp => ReturnCode::EINVAL,
-                        })
+                        .unwrap_or_else(|err| err.into())
                 })
             }
-            NonvolatileCommand::KernelRead |
-            NonvolatileCommand::KernelWrite => {
+            NonvolatileCommand::KernelRead | NonvolatileCommand::KernelWrite => {
+                self.kernel_buffer
+                    .take()
+                    .map_or(ReturnCode::ENOMEM, |kernel_buffer| {
+                        let active_len = cmp::min(length, kernel_buffer.len());
 
-                self.kernel_buffer.take().map_or(ReturnCode::ENOMEM, |kernel_buffer| {
-                    let active_len = cmp::min(length, kernel_buffer.len());
+                        // Check if there is something going on.
+                        if self.current_user.get().is_none() {
+                            // Nothing is using this, lets go!
+                            self.current_user.set(Some(NonvolatileUser::Kernel));
 
-                    // Check if there is something going on.
-                    if self.current_user.get().is_none() {
-                        // Nothing is using this, lets go!
-                        self.current_user.set(Some(NonvolatileUser::Kernel));
-
-                        match command {
-                            NonvolatileCommand::KernelRead => {
-                                self.driver.read(kernel_buffer, offset, active_len)
+                            match command {
+                                NonvolatileCommand::KernelRead => {
+                                    self.driver.read(kernel_buffer, offset, active_len)
+                                }
+                                NonvolatileCommand::KernelWrite => {
+                                    self.driver.write(kernel_buffer, offset, active_len)
+                                }
+                                _ => ReturnCode::FAIL,
                             }
-                            NonvolatileCommand::KernelWrite => {
-                                self.driver.write(kernel_buffer, offset, active_len)
-                            }
-                            _ => ReturnCode::FAIL,
-                        }
-
-                    } else {
-                        if self.kernel_pending_command.get() == true {
-                            ReturnCode::ENOMEM
                         } else {
-                            self.kernel_pending_command.set(true);
-                            self.kernel_command.set(command);
-                            self.kernel_readwrite_length.set(active_len);
-                            self.kernel_readwrite_address.set(offset);
-                            self.kernel_buffer.replace(kernel_buffer);
-                            ReturnCode::SUCCESS
+                            if self.kernel_pending_command.get() == true {
+                                ReturnCode::ENOMEM
+                            } else {
+                                self.kernel_pending_command.set(true);
+                                self.kernel_command.set(command);
+                                self.kernel_readwrite_length.set(active_len);
+                                self.kernel_readwrite_address.set(offset);
+                                self.kernel_buffer.replace(kernel_buffer);
+                                ReturnCode::SUCCESS
+                            }
                         }
-                    }
-                })
+                    })
             }
         }
-
     }
 
-    fn userspace_call_driver(&self,
-                             command: NonvolatileCommand,
-                             offset: usize,
-                             length: usize)
-                             -> ReturnCode {
-
+    fn userspace_call_driver(
+        &self,
+        command: NonvolatileCommand,
+        offset: usize,
+        length: usize,
+    ) -> ReturnCode {
         // Calculate where we want to actually read from in the physical
         // storage.
         let physical_address = offset + self.userspace_start_address;
@@ -345,29 +341,33 @@ impl<'a> NonvolatileStorage<'a> {
                 self.current_user.set(Some(NonvolatileUser::Kernel));
 
                 match self.kernel_command.get() {
-                    NonvolatileCommand::KernelRead => {
-                        self.driver.read(kernel_buffer,
-                                         self.kernel_readwrite_address.get(),
-                                         self.kernel_readwrite_length.get())
-                    }
-                    NonvolatileCommand::KernelWrite => {
-                        self.driver.write(kernel_buffer,
-                                          self.kernel_readwrite_address.get(),
-                                          self.kernel_readwrite_length.get())
-                    }
+                    NonvolatileCommand::KernelRead => self.driver.read(
+                        kernel_buffer,
+                        self.kernel_readwrite_address.get(),
+                        self.kernel_readwrite_length.get(),
+                    ),
+                    NonvolatileCommand::KernelWrite => self.driver.write(
+                        kernel_buffer,
+                        self.kernel_readwrite_address.get(),
+                        self.kernel_readwrite_length.get(),
+                    ),
                     _ => ReturnCode::FAIL,
                 }
             });
         } else {
             // If the kernel is not requesting anything, check all of the apps.
             for cntr in self.apps.iter() {
-                let started_command = cntr.enter(|app, _| if app.pending_command {
-                    app.pending_command = false;
-                    self.current_user.set(Some(NonvolatileUser::App { app_id: app.appid() }));
-                    self.userspace_call_driver(app.command, app.offset, app.length) ==
-                    ReturnCode::SUCCESS
-                } else {
-                    false
+                let started_command = cntr.enter(|app, _| {
+                    if app.pending_command {
+                        app.pending_command = false;
+                        self.current_user.set(Some(NonvolatileUser::App {
+                            app_id: app.appid(),
+                        }));
+                        self.userspace_call_driver(app.command, app.offset, app.length)
+                            == ReturnCode::SUCCESS
+                    } else {
+                        false
+                    }
                 });
                 if started_command {
                     break;
@@ -385,9 +385,9 @@ impl<'a> hil::nonvolatile_storage::NonvolatileStorageClient for NonvolatileStora
             self.current_user.set(None);
             match user {
                 NonvolatileUser::Kernel => {
-                    self.kernel_client
-                        .get()
-                        .map(move |client| { client.read_done(buffer, length); });
+                    self.kernel_client.get().map(move |client| {
+                        client.read_done(buffer, length);
+                    });
                 }
                 NonvolatileUser::App { app_id } => {
                     let _ = self.apps.enter(app_id, move |app, _| {
@@ -420,9 +420,9 @@ impl<'a> hil::nonvolatile_storage::NonvolatileStorageClient for NonvolatileStora
             self.current_user.set(None);
             match user {
                 NonvolatileUser::Kernel => {
-                    self.kernel_client
-                        .get()
-                        .map(move |client| { client.write_done(buffer, length); });
+                    self.kernel_client.get().map(move |client| {
+                        client.write_done(buffer, length);
+                    });
                 }
                 NonvolatileUser::App { app_id } => {
                     let _ = self.apps.enter(app_id, move |app, _| {
@@ -475,11 +475,7 @@ impl<'a> Driver for NonvolatileStorage<'a> {
                 }
                 ReturnCode::SUCCESS
             })
-            .unwrap_or_else(|err| match err {
-                Error::OutOfMemory => ReturnCode::ENOMEM,
-                Error::AddressOutOfBounds => ReturnCode::EINVAL,
-                Error::NoSuchApp => ReturnCode::EINVAL,
-            })
+            .unwrap_or_else(|err| err.into())
     }
 
     /// Setup callbacks.
@@ -498,11 +494,7 @@ impl<'a> Driver for NonvolatileStorage<'a> {
                 }
                 ReturnCode::SUCCESS
             })
-            .unwrap_or_else(|err| match err {
-                Error::OutOfMemory => ReturnCode::ENOMEM,
-                Error::AddressOutOfBounds => ReturnCode::EINVAL,
-                Error::NoSuchApp => ReturnCode::EINVAL,
-            })
+            .unwrap_or_else(|err| err.into())
     }
 
     /// Command interface.
@@ -515,7 +507,7 @@ impl<'a> Driver for NonvolatileStorage<'a> {
     /// - `1`: Return the number of bytes available to userspace.
     /// - `2`: Start a read from the nonvolatile storage.
     /// - `3`: Start a write to the nonvolatile_storage.
-    fn command(&self, arg0: usize, arg1: usize, appid: AppId) -> ReturnCode {
+    fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
         let command_num = arg0 & 0xFF;
 
         match command_num {

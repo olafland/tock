@@ -21,7 +21,7 @@ pub struct AppPtr<L, T> {
 impl<L, T> AppPtr<L, T> {
     pub unsafe fn new(ptr: *mut T, appid: AppId) -> AppPtr<L, T> {
         AppPtr {
-            ptr: Unique::new(ptr),
+            ptr: Unique::new_unchecked(ptr),
             process: appid,
             _phantom: PhantomData,
         }
@@ -47,7 +47,9 @@ impl<L, T> Drop for AppPtr<L, T> {
         unsafe {
             let ps = &mut process::PROCS;
             if ps.len() > self.process.idx() {
-                ps[self.process.idx()].as_mut().map(|process| process.free(self.ptr.as_mut()));
+                ps[self.process.idx()]
+                    .as_mut()
+                    .map(|process| process.free(self.ptr.as_mut()));
             }
         }
     }

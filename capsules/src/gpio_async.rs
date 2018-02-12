@@ -26,7 +26,6 @@
 use core::cell::Cell;
 use kernel::{AppId, Callback, Driver};
 use kernel::ReturnCode;
-
 use kernel::hil;
 
 pub struct GPIOAsync<'a, Port: hil::gpio_async::Port + 'a> {
@@ -47,9 +46,9 @@ impl<'a, Port: hil::gpio_async::Port> GPIOAsync<'a, Port> {
     fn configure_input_pin(&self, port: usize, pin: usize, config: usize) -> ReturnCode {
         let ports = self.ports.as_ref();
         let mode = match config {
-            0 => hil::gpio::InputMode::PullUp,
-            1 => hil::gpio::InputMode::PullDown,
-            2 => hil::gpio::InputMode::PullNone,
+            0 => hil::gpio::InputMode::PullNone,
+            1 => hil::gpio::InputMode::PullUp,
+            2 => hil::gpio::InputMode::PullDown,
             _ => return ReturnCode::EINVAL,
         };
         ports[port].make_input(pin, mode)
@@ -69,7 +68,9 @@ impl<'a, Port: hil::gpio_async::Port> GPIOAsync<'a, Port> {
 
 impl<'a, Port: hil::gpio_async::Port> hil::gpio_async::Client for GPIOAsync<'a, Port> {
     fn fired(&self, pin: usize, identifier: usize) {
-        self.interrupt_callback.get().map(|mut cb| cb.schedule(identifier, pin, 0));
+        self.interrupt_callback
+            .get()
+            .map(|mut cb| cb.schedule(identifier, pin, 0));
     }
 
     fn done(&self, value: usize) {
@@ -113,9 +114,10 @@ impl<'a, Port: hil::gpio_async::Port> Driver for GPIOAsync<'a, Port> {
 
     /// Configure and read GPIO pins.
     ///
-    /// `data` is a 32 bit value packed with the lowest 8 bits as the port
-    /// number, the next lowest 8 bits as the pin number, and the remaining
-    /// upper bits as a command-specific value.
+    /// `pin` is the index of the pin.
+    ///
+    /// `data` is a 32 bit value packed with the lowest 16 bits as the port
+    /// number, and the remaining upper bits as a command-specific value.
     ///
     /// ### `command_num`
     ///
@@ -134,9 +136,8 @@ impl<'a, Port: hil::gpio_async::Port> Driver for GPIOAsync<'a, Port> {
     ///   interrupt, and 2 for a falling edge interrupt.
     /// - `8`: Disable an interrupt on a pin.
     /// - `9`: Disable a GPIO pin.
-    fn command(&self, command_num: usize, data: usize, _: AppId) -> ReturnCode {
-        let port = data & 0xFF;
-        let pin = (data >> 8) & 0xFF;
+    fn command(&self, command_num: usize, pin: usize, data: usize, _: AppId) -> ReturnCode {
+        let port = data & 0xFFFF;
         let other = (data >> 16) & 0xFFFF;
         let ports = self.ports.as_ref();
 
@@ -147,7 +148,9 @@ impl<'a, Port: hil::gpio_async::Port> Driver for GPIOAsync<'a, Port> {
 
         match command_num {
             // How many ports
-            0 => ReturnCode::SuccessWithValue { value: ports.len() as usize },
+            0 => ReturnCode::SuccessWithValue {
+                value: ports.len() as usize,
+            },
 
             // enable output
             1 => ports[port].make_output(pin),

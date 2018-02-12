@@ -24,7 +24,7 @@ List of Tock Capsules
 
 The list of Tock capsules and a brief description.
 
-### Sensor Drivers
+### Sensor and other IC Drivers
 
 These implement a driver to setup and read various physical sensors.
 
@@ -34,9 +34,6 @@ These implement a driver to setup and read various physical sensors.
 - **[SI7021](src/si7021.rs)**: Temperature and humidity sensor.
 - **[TMP006](src/tmp006.rs)**: Infrared temperature sensor.
 - **[TSL2561](src/tsl2561.rs)**: Light sensor.
-
-
-### Other IC Drivers
 
 These drivers provide support for various ICs.
 
@@ -54,8 +51,15 @@ Support for wireless radios.
 
 - **[nRF51822 Serialization](src/nrf51822_serialization.rs)**: Kernel support
   for using the nRF51 serialization library.
-- **[IEEE 802.15.4 Radio](src/radio.rs)**: Userspace library for 15.4 radios.
 - **[RF233](src/rf233.rs)**: Driver for RF233 radio.
+
+
+### Libraries
+
+Protocol stacks and other libraries.
+
+- **[IEEE 802.15.4](src/ieee802154)**: 802.15.4 networking.
+- **[USB](src/usb.rs)**: USB 2.0.
 
 
 ### MCU Peripherals for Userspace
@@ -63,6 +67,7 @@ Support for wireless radios.
 These capsules provide a `Driver` interface for common MCU peripherals.
 
 - **[ADC](src/adc.rs)**: Individual and continuous samples.
+- **[Alarm](src/alarm.rs)**: Oneshot and periodic timers.
 - **[CRC](src/crc.rs)**: CRC calculation.
 - **[DAC](src/dac.rs)**: Digital to analog conversion.
 - **[GPIO](src/gpio.rs)**: GPIO configuring and control.
@@ -70,16 +75,20 @@ These capsules provide a `Driver` interface for common MCU peripherals.
 - **[RNG](src/rng.rs)**: Random number generation.
 - **[SPI](src/spi.rs)**: SPI master and slave.
 - **[Symmetric Encryption](src/symmetric_encryption.rs)**: AES encryption.
-- **[Timer](src/timer.rs)**: Oneshot and periodic timers.
 
 
 ### Helpful Userspace Capsules
 
 These provide common and better abstractions for userspace.
 
+- **[Ambient Light](src/ambient_light.rs)**: Query light sensors.
+- **[App Flash](src/app_flash_driver.rs)**: Allow applications to write their
+  own flash.
 - **[Button](src/button.rs)**: Detect button presses.
 - **[Console](src/console.rs)**: UART console support.
+- **[Humidity](src/humidity.rs)**: Query humidity sensors.
 - **[LED](src/led.rs)**: Turn on and off LEDs.
+- **[Temperature](src/temperature.rs)**: Query temperature sensors.
 
 
 ### Virtualized Sensor Capsules for Userspace
@@ -99,11 +108,12 @@ simultaneously) support for generic sensor interfaces.
 These allow for multiple users of shared hardware resources in the kernel.
 
 - **[Virtual Alarm](src/virtual_alarm.rs)**: Shared alarm resource.
+- **[Virtual Flash](src/virtual_flash.rs)**: Shared flash resource.
 - **[Virtual I2C](src/virtual_i2c.rs)**: Shared I2C and fixed addresses.
 - **[Virtual SPI](src/virtual_spi.rs)**: Shared SPI and fixed chip select pins.
 
 
-### Utilty Capsules
+### Utility Capsules
 
 Other capsules that implement reusable logic.
 

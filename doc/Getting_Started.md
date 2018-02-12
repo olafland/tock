@@ -7,15 +7,15 @@ developing Tock.
 ## Requirements
 
 1. [Rust](http://www.rust-lang.org/) (install `rustup` so Tock will choose the right version automatically)
-1. [Xargo](http://www.rust-lang.org/) (Rust `cargo` wrapper that installs core library for embedded targets)
-2. [arm-none-eabi toolchain](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads) (version >= 5.2)
-3. Command line utilities: wget, sed, make
+2. [Xargo](http://www.rust-lang.org/) (Rust `cargo` wrapper that installs core library for embedded targets)
+3. [arm-none-eabi toolchain](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads) (version >= 5.2)
+4. Command line utilities: wget, sed, make, cmake
 
 ### Installing Requirements
 
 #### Rust (nightly)
 
-We are using `rustc 1.19.0-nightly (04145943a 2017-06-19)`. We recommend
+We are using `rustc 1.24.0-nightly (8e7a609e6 2018-01-04)`. We recommend
 installing it with [rustup](http://www.rustup.rs) so you can manage multiple
 versions of Rust and continue using stable versions for other Rust code:
 
@@ -30,7 +30,7 @@ to your `$PATH`.
 Then install the correct nightly version of Rust:
 
 ```bash
-$ rustup install nightly-2017-06-20
+$ rustup install nightly-2018-01-05
 ```
 
 #### Xargo
@@ -97,8 +97,8 @@ Check that you have a 64-bit version of libc installed.
 
 ```bash
 $ sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
-$ sudo apt-get update
-$ sudo apt-get install gcc-arm-embedded
+$ sudo apt update
+$ sudo apt install gcc-arm-embedded
 ```
 
 ###### Arch
@@ -114,8 +114,8 @@ $ sudo pacman -S arm-none-eabi-gcc arm-none-eabi-newlib arm-none-eabi-gdb
 
 You can download precompiled binaries for Windows from the ARM site listed
 above. While we expect things should work on Windows, none of the active Tock
-developers currently develop on Windows, so it is possible that are some
-unexpected pitfalls.
+developers currently develop on Windows, so it is possible that there are
+some unexpected pitfalls.
 
 ##### Other
 
@@ -125,37 +125,22 @@ you can use the build scripts in the `tools` directory, in this order:
 
 ## Compiling the Kernel
 
-To build the kernel, just type `make` in the root directory.  The root
-Makefile selects a board and architecture to build the kernel for and
-routes all calls to that board's specific Makefile. The root Makefile
-is set up with the following defaults:
+Tock builds a unique kernel for every _board_ it supports. Boards include
+details like pulling together the correct chips and pin assignments. To
+build a kernel, first choose a board, then navigate to that board directory.
+e.g. `cd boards/hail ; make`.
 
-```
-TOCK_BOARD ?= hail
-```
+Some boards have special build options that can only be used within the board's
+directory.  All boards share a few common targets:
 
-Thus it compiles for the Hail board by default. There are two ways to
-build for a different board:
+  - `all` (default): Compile Tock for this board.
+  - `debug`: Generate build(s) for debugging support, details vary per board.
+  - `doc`: Build documentation for this board.
+  - `clean`: Remove built artifacts for this board.
+  - `flash`: Load code using JTAG, if available.
+  - `program`: Load code using a bootloader, if available.
 
- * You can compile the kernel for a specific board by running the command
-   from inside the board's directory:
-
-    ```bash
-    $ cd boards/nrf51dk/
-    $ make
-    ```
-
- * Alternatively, you can add a `TOCK_BOARD` environment variable where
-    `TOCK_BOARD` is the directory name inside `boards/`.
-
-    ```bash
-    $ make TOCK_BOARD=nrf51dk
-    ```
-
-Board specific Makefiles are located in `boards/<BOARD>/`. Some boards have
-special build options that can only be used within the board's directory.
-Generic options such as `clean`, `doc`, `debug`, `program`, and `flash` can be
-accessed from Tock's root.
+The READMEs in each board provide more details for each platform.
 
 ## Compiling applications
 
@@ -186,24 +171,17 @@ This will build the app and generate a binary in Tock Binary Format
 (using the `elf2tbf` utility):
 `userland/examples/blink/build/cortex-m4/cortex-m4.bin`.
 
-Alternatively, apps can be built and automatically uploaded from the
-Tock root directory:
-
-```bash
-$ make examples/blink
-```
-
 ## Loading the kernel and applications onto a board
 
 ### Optional Requirements
 
-For some boards, currently `Hail` and `imix` (but not `imixv1`), you will need
-`tockloader`. `tockloader` also has features that are generally useful to all
-Tock boards, such as easy to manage serial connections, and the ability to
-list, add, replace, and remove applications over JTAG (or USB if a bootloader
-is installed).
+For some boards, currently `Hail` and `imix`, you will need `tockloader`.
+`tockloader` also has features that are generally useful to all Tock boards,
+such as easy to manage serial connections, and the ability to list, add,
+replace, and remove applications over JTAG (or USB if a bootloader is
+installed).
 
-1. [tockloader](https://github.com/helena-project/tockloader) (version 0.6.1)
+1. [tockloader](https://github.com/helena-project/tockloader) (version >= 0.8)
 
 Installing applications over JTAG, depending on your JTAG Debugger, you will
 need one of:
@@ -213,11 +191,11 @@ need one of:
 
 #### `tockloader`
 
-Tock requires `tockloader` version `0.6.1`. To install:
+Tock requires `tockloader`. To install:
 
 ```bash
-(Linux): sudo pip3 install tockloader==0.6.1
-(MacOS): pip3 install tockloader==0.6.1
+(Linux): sudo pip3 install tockloader
+(MacOS): pip3 install tockloader
 ```
 
 #### `openocd`
@@ -234,8 +212,7 @@ support the SAM4L on `imix`.
 
 If you want to upload code through a [JLink JTAG
 debugger](https://www.segger.com/j-link-edu.html) (available on
-[Digikey](https://www.digikey.com/product-detail/en/segger-microcontroller-systems/8.08.90-J-LINK-EDU/899-1008-ND/2263130)
-), you should install JLinkExe. We require a version greater than or equal to `5.0`.
+[Digikey](https://www.digikey.com/product-detail/en/segger-microcontroller-systems/8.08.90-J-LINK-EDU/899-1008-ND/2263130)), you should install JLinkExe. We require a version greater than or equal to `5.0`.
 
 It is available [here](https://www.segger.com/downloads/jlink). You want to the
 "J-Link Software and Documentation Pack". There are various packages available
@@ -249,7 +226,8 @@ the board specific READMEs:
 
 * [imix](../boards/imix/README.md)
 * [Hail](../boards/hail/README.md)
-* [nRF](../boards/nrf51dk/README.md)
+* [nRF51-DK](../boards/nrf51dk/README.md)
+* [nRF52-DK](../boards/nrf52dk/README.md)
 
 
 ## Formatting Rust Source Code

@@ -27,13 +27,13 @@ APP_HEAP_SIZE    ?= 1024
 KERNEL_HEAP_SIZE ?= 1024
 
 # PACKAGE_NAME is used to identify the application for IPC and for error reporting
-PACKAGE_NAME ?= $(notdir $(shell pwd))
+PACKAGE_NAME ?= $(shell basename "$(shell pwd)")
 
 # Tock supported architectures
-TOCK_ARCHS ?= cortex-m0 cortex-m4
+TOCK_ARCHS ?= cortex-m0 cortex-m3 cortex-m4
 
 # This could be replaced with an installed version of `elf2tbf`
-ELF2TBF ?= cargo run --manifest-path $(abspath $(TOCK_USERLAND_BASE_DIR))/tools/elf2tbf/Cargo.toml --
+ELF2TBF ?= cargo run --manifest-path $(TOCK_USERLAND_BASE_DIR)/tools/elf2tbf/Cargo.toml --
 ELF2TBF_ARGS += -n $(PACKAGE_NAME)
 
 # Flags for building app Assembly, C, C++ files
@@ -43,7 +43,7 @@ override ASFLAGS += -mthumb
 override CFLAGS  += -std=gnu11
 override CPPFLAGS += \
 	    -frecord-gcc-switches\
-	    -g\
+	    -gdwarf-2\
 	    -Os\
 	    -fdata-sections -ffunction-sections\
 	    -fstack-usage -Wstack-usage=$(STACK_SIZE)\
@@ -57,7 +57,12 @@ override CPPFLAGS += \
 	    -mfloat-abi=soft\
 	    -msingle-pic-base\
 	    -mpic-register=r9\
-	    -mno-pic-data-is-text-relative
+	    -mno-pic-data-is-text-relative\
+	    -DSTACK_SIZE=$(STACK_SIZE)
+
+# This allows Tock to add additional warnings for functions that frequently cause problems.
+# See the included header for more details.
+override CPPFLAGS += -include $(TOCK_USERLAND_BASE_DIR)/support/warning_header.h
 
 # Flags for creating application Object files
 OBJDUMP_FLAGS += --disassemble-all --source --disassembler-options=force-thumb -C --section-headers

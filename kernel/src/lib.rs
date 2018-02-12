@@ -1,10 +1,12 @@
-#![feature(asm,core_intrinsics,unique,nonzero,const_fn,lang_items)]
+#![feature(asm, core_intrinsics, unique, nonzero)]
+#![feature(const_fn, const_cell_new, const_unsafe_cell_new, lang_items)]
 #![no_std]
 
+#[macro_use]
 pub mod common;
 
 pub mod callback;
-pub mod container;
+pub mod grant;
 #[macro_use]
 pub mod debug;
 pub mod driver;
@@ -28,19 +30,21 @@ mod syscall;
 mod platform;
 
 pub use callback::{AppId, Callback};
-pub use container::Container;
 pub use driver::Driver;
-pub use mem::{AppSlice, AppPtr, Private, Shared};
-pub use platform::{Chip, mpu, Platform, systick};
+pub use grant::Grant;
+pub use mem::{AppPtr, AppSlice, Private, Shared};
+pub use platform::{mpu, systick, Chip, Platform};
 pub use platform::systick::SysTick;
 pub use process::{Process, State};
 pub use returncode::ReturnCode;
 
 /// Main loop.
-pub fn main<P: Platform, C: Chip>(platform: &P,
-                                  chip: &mut C,
-                                  processes: &'static mut [Option<process::Process<'static>>],
-                                  ipc: &ipc::IPC) {
+pub fn main<P: Platform, C: Chip>(
+    platform: &P,
+    chip: &mut C,
+    processes: &'static mut [Option<process::Process<'static>>],
+    ipc: &ipc::IPC,
+) {
     let processes = unsafe {
         process::PROCS = processes;
         &mut process::PROCS
@@ -59,10 +63,12 @@ pub fn main<P: Platform, C: Chip>(platform: &P,
                 }
             }
 
-            support::atomic(|| if !chip.has_pending_interrupts() && process::processes_blocked() {
-                chip.prepare_for_sleep();
-                support::wfi();
-            })
+            support::atomic(|| {
+                if !chip.has_pending_interrupts() && process::processes_blocked() {
+                    chip.prepare_for_sleep();
+                    support::wfi();
+                }
+            });
         };
     }
 }
