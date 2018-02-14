@@ -19,3 +19,5 @@ pub mod timer;
 pub mod temperature;
 pub mod trng;
 pub mod constants;
+
+pub mod play;
