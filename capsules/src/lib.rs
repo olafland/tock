@@ -54,3 +54,5 @@ pub mod temperature;
 pub mod humidity;
 pub mod aes_ccm;
 //pub mod nrf_internal_temp_sensor;
+
+pub mod playground;

@@ -72,6 +72,7 @@ extern crate kernel;
 extern crate nrf52;
 extern crate nrf5x;
 
+use capsules::playground;
 use capsules::virtual_alarm::VirtualMuxAlarm;
 use nrf5x::rtc::Rtc;
 
@@ -122,6 +123,7 @@ pub struct Platform {
         'static,
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf5x::rtc::Rtc>,
     >,
+    playground: &'static playground::Playground<'static, VirtualMuxAlarm<'static, Rtc>>,
 }
 
 impl kernel::Platform for Platform {
@@ -331,6 +333,20 @@ pub unsafe fn reset_handler() {
     );
     nrf5x::trng::TRNG.set_client(rng);
 
+    let playground_virtual_alarm = static_init!(
+        VirtualMuxAlarm<'static, Rtc>,
+        VirtualMuxAlarm::new(mux_alarm)
+    );
+    let playground = static_init!(
+        playground::Playground<
+            'static,
+            VirtualMuxAlarm<'static, Rtc>, /*, sam4l::gpio::GPIOPin*/
+        >,
+        playground::Playground::new(playground_virtual_alarm /*, isl29035, &sam4l::gpio::PA[13]*/)
+    );
+    //hil::sensors::AmbientLight::set_client(isl29035, sensys);
+    playground_virtual_alarm.set_client(playground);
+
     // Start all of the clocks. Low power operation will require a better
     // approach than this.
     nrf5x::clock::CLOCK.low_stop();
@@ -352,7 +368,10 @@ pub unsafe fn reset_handler() {
         rng: rng,
         temp: temp,
         alarm: alarm,
+        playground: playground,
     };
+
+    platform.playground.start();
 
     let mut chip = nrf52::chip::NRF52::new();
 
