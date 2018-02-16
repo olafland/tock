@@ -1,4 +1,5 @@
 // toggle LEDS in some funny patterns
+// maybe first: cleanup up leds interface with nice funcitons: so that it can also be called from within the kernel
 // read some sensor
 // wait for button pressed
 
